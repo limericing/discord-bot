@@ -56,7 +56,6 @@ CREWS_FILE = os.path.join(BASE_DIR, "crews.json")
 TICKETS_FILE = os.path.join(BASE_DIR, "tickets.json")
 STATS_FILE = os.path.join(BASE_DIR, "stats.json")
 
-# Activity requirements
 ACTIVITY_BYPASS_MESSAGES = 200
 ACTIVITY_BYPASS_VC_SECONDS = 10 * 60 * 60
 
@@ -556,23 +555,13 @@ def build_member_info_embed(
         )
 
     if friend_count is None:
-
         friends_text = "Unable to check"
-
     else:
-
-        friends_text = str(
-            friend_count
-        )
+        friends_text = str(friend_count)
 
     if blacklisted:
-
-        blacklist_text = ", ".join(
-            blacklisted
-        )
-
+        blacklist_text = ", ".join(blacklisted)
     else:
-
         blacklist_text = "None"
 
     if discord_age >= MIN_ACCOUNT_AGE_DAYS:
@@ -651,7 +640,6 @@ def build_member_info_embed(
     )
 
     if avatar_url:
-
         embed.set_thumbnail(
             url=avatar_url
         )
@@ -740,15 +728,11 @@ class VerificationModal(
 
             return
 
-        # Prevent duplicate tickets.
         for channel_id, ticket in TICKETS.items():
 
-            if str(
-                ticket.get("discord_id")
-            ) != str(
+            if str(ticket.get("discord_id")) != str(
                 interaction.user.id
             ):
-
                 continue
 
             existing = guild.get_channel(
@@ -803,22 +787,16 @@ class VerificationModal(
             or character in "-_"
         )
 
-        channel_name = (
-            f"verify-{safe_username}"
+        channel_name = f"verify-{safe_username}"
+
+        ticket_channel = await guild.create_text_channel(
+            channel_name,
+            category=category,
+            overwrites=overwrites,
+            reason="Ghost verification ticket"
         )
 
-        ticket_channel = (
-            await guild.create_text_channel(
-                channel_name,
-                category=category,
-                overwrites=overwrites,
-                reason="Ghost verification ticket"
-            )
-        )
-
-        created = details.get(
-            "created"
-        )
+        created = details.get("created")
 
         if not created:
 
@@ -828,35 +806,24 @@ class VerificationModal(
 
         ticket_data = {
 
-            "discord_id":
-                interaction.user.id,
+            "discord_id": interaction.user.id,
 
-            "discord_name":
-                str(interaction.user),
+            "discord_name": str(interaction.user),
 
-            "roblox_username":
-                username,
+            "roblox_username": username,
 
-            "roblox_id":
-                user_id,
+            "roblox_id": user_id,
 
-            "created":
-                created,
+            "created": created,
 
-            "blacklisted":
-                blacklisted,
+            "blacklisted": blacklisted,
 
-            "claimed_by":
-                None
+            "claimed_by": None
         }
 
-        TICKETS[
-            str(ticket_channel.id)
-        ] = ticket_data
+        TICKETS[str(ticket_channel.id)] = ticket_data
 
-        save_tickets(
-            TICKETS
-        )
+        save_tickets(TICKETS)
 
         username_log = guild.get_channel(
             USERNAME_LOG_CHANNEL_ID
@@ -961,10 +928,6 @@ class TicketView(View):
             )
         )
 
-    # -----------------------------------------------------
-    # CLAIM
-    # -----------------------------------------------------
-
     @discord.ui.button(
         label="Claim",
         style=discord.ButtonStyle.secondary,
@@ -977,9 +940,7 @@ class TicketView(View):
         button: Button
     ):
 
-        if not has_staff_permission(
-            interaction
-        ):
+        if not has_staff_permission(interaction):
 
             await interaction.response.send_message(
                 "You do not have permission to claim tickets.",
@@ -1001,24 +962,16 @@ class TicketView(View):
 
             return
 
-        TICKETS[
-            channel_id
-        ]["claimed_by"] = (
+        TICKETS[channel_id]["claimed_by"] = (
             interaction.user.id
         )
 
-        save_tickets(
-            TICKETS
-        )
+        save_tickets(TICKETS)
 
         await interaction.response.send_message(
             f"This ticket has been claimed by "
             f"{interaction.user.mention}."
         )
-
-    # -----------------------------------------------------
-    # RE-SCAN
-    # -----------------------------------------------------
 
     @discord.ui.button(
         label="Re-scan",
@@ -1032,9 +985,7 @@ class TicketView(View):
         button: Button
     ):
 
-        if not has_staff_permission(
-            interaction
-        ):
+        if not has_staff_permission(interaction):
 
             await interaction.response.send_message(
                 "You do not have permission to re-scan tickets.",
@@ -1058,13 +1009,8 @@ class TicketView(View):
 
         await interaction.response.defer()
 
-        user_id = ticket[
-            "roblox_id"
-        ]
-
-        username = ticket[
-            "roblox_username"
-        ]
+        user_id = ticket["roblox_id"]
+        username = ticket["roblox_username"]
 
         user_data = await asyncio.to_thread(
             get_roblox_user,
@@ -1089,13 +1035,9 @@ class TicketView(View):
 
             return
 
-        ticket[
-            "blacklisted"
-        ] = blacklisted
+        ticket["blacklisted"] = blacklisted
 
-        save_tickets(
-            TICKETS
-        )
+        save_tickets(TICKETS)
 
         member = interaction.guild.get_member(
             ticket["discord_id"]
@@ -1123,10 +1065,6 @@ class TicketView(View):
             embed=embed
         )
 
-    # -----------------------------------------------------
-    # ALL GROUPS
-    # -----------------------------------------------------
-
     @discord.ui.button(
         label="All Groups",
         style=discord.ButtonStyle.secondary,
@@ -1139,9 +1077,7 @@ class TicketView(View):
         button: Button
     ):
 
-        if not has_staff_permission(
-            interaction
-        ):
+        if not has_staff_permission(interaction):
 
             await interaction.response.send_message(
                 "You do not have permission to view groups.",
@@ -1215,25 +1151,16 @@ class TicketView(View):
                 f"{role_name}"
             )
 
-        output = "\n".join(
-            lines
-        )
+        output = "\n".join(lines)
 
         if len(output) > 1900:
 
-            output = (
-                output[:1900]
-                + "\n..."
-            )
+            output = output[:1900] + "\n..."
 
         await interaction.followup.send(
             output,
             ephemeral=True
         )
-
-    # -----------------------------------------------------
-    # CLOSE
-    # -----------------------------------------------------
 
     @discord.ui.button(
         label="Close",
@@ -1247,9 +1174,7 @@ class TicketView(View):
         button: Button
     ):
 
-        if not has_staff_permission(
-            interaction
-        ):
+        if not has_staff_permission(interaction):
 
             await interaction.response.send_message(
                 "You do not have permission to close tickets.",
@@ -1274,13 +1199,9 @@ class TicketView(View):
 
         if channel_id in TICKETS:
 
-            del TICKETS[
-                channel_id
-            ]
+            del TICKETS[channel_id]
 
-            save_tickets(
-                TICKETS
-            )
+            save_tickets(TICKETS)
 
         await interaction.channel.delete(
             reason="Ghost verification ticket closed"
@@ -1291,9 +1212,7 @@ class TicketView(View):
 # TRANSCRIPTS
 # =========================================================
 
-async def create_transcript(
-    channel
-):
+async def create_transcript(channel):
 
     messages = []
 
@@ -1304,44 +1223,33 @@ async def create_transcript(
 
         messages.append({
 
-            "id":
-                message.id,
+            "id": message.id,
 
-            "author_id":
-                message.author.id,
+            "author_id": message.author.id,
 
-            "author":
-                str(message.author),
+            "author": str(message.author),
 
-            "content":
-                message.content,
+            "content": message.content,
 
-            "created_at":
-                message.created_at.isoformat(),
+            "created_at": message.created_at.isoformat(),
 
-            "attachments":
-                [
-                    attachment.url
-                    for attachment
-                    in message.attachments
-                ]
+            "attachments": [
+                attachment.url
+                for attachment in message.attachments
+            ]
         })
 
     transcript = {
 
-        "channel_id":
-            channel.id,
+        "channel_id": channel.id,
 
-        "channel_name":
-            channel.name,
+        "channel_name": channel.name,
 
-        "created_at":
-            datetime.now(
-                timezone.utc
-            ).isoformat(),
+        "created_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
 
-        "messages":
-            messages
+        "messages": messages
     }
 
     transcript_folder = os.path.join(
@@ -1451,9 +1359,7 @@ async def scan(
 
     await ctx.send(
         "Crew detected: "
-        + ", ".join(
-            blacklisted
-        )
+        + ", ".join(blacklisted)
     )
 
 
@@ -1469,9 +1375,7 @@ async def addcrew(
     name: str
 ):
 
-    if not has_add_crew_permission(
-        ctx
-    ):
+    if not has_add_crew_permission(ctx):
 
         await ctx.send(
             "You do not have permission to add crews."
@@ -1487,13 +1391,9 @@ async def addcrew(
 
         return
 
-    CREWS[
-        group_id
-    ] = name
+    CREWS[group_id] = name
 
-    save_crews(
-        CREWS
-    )
+    save_crews(CREWS)
 
     await ctx.send(
         f"Added crew **{name}** (`{group_id}`)."
@@ -1510,9 +1410,7 @@ async def removecrew(
     group_id: str
 ):
 
-    if not has_add_crew_permission(
-        ctx
-    ):
+    if not has_add_crew_permission(ctx):
 
         await ctx.send(
             "You do not have permission to remove crews."
@@ -1528,13 +1426,9 @@ async def removecrew(
 
         return
 
-    name = CREWS.pop(
-        group_id
-    )
+    name = CREWS.pop(group_id)
 
-    save_crews(
-        CREWS
-    )
+    save_crews(CREWS)
 
     await ctx.send(
         f"Removed crew **{name}** (`{group_id}`)."
@@ -1546,9 +1440,7 @@ async def removecrew(
 # =========================================================
 
 @bot.command()
-async def listcrews(
-    ctx
-):
+async def listcrews(ctx):
 
     if not CREWS:
 
@@ -1575,9 +1467,7 @@ async def listcrews(
 # GACCEPT
 # =========================================================
 
-def find_join_request(
-    user_id
-):
+def find_join_request(user_id):
 
     if not ROBLOX_API_KEY:
         return None
@@ -1588,8 +1478,7 @@ def find_join_request(
     )
 
     headers = {
-        "x-api-key":
-            ROBLOX_API_KEY
+        "x-api-key": ROBLOX_API_KEY
     }
 
     page_token = None
@@ -1601,15 +1490,11 @@ def find_join_request(
         }
 
         if page_token:
-            params[
-                "pageToken"
-            ] = page_token
+            params["pageToken"] = page_token
 
         response = roblox_request(
-
             "GET",
             url,
-
             headers=headers,
             params=params
         )
@@ -1634,10 +1519,7 @@ def find_join_request(
                 or user.get("id")
             )
 
-            if str(
-                request_user_id
-            ) == str(user_id):
-
+            if str(request_user_id) == str(user_id):
                 return request
 
         page_token = data.get(
@@ -1650,9 +1532,7 @@ def find_join_request(
     return None
 
 
-def accept_join_request(
-    request_id
-):
+def accept_join_request(request_id):
 
     if not ROBLOX_API_KEY:
         return False
@@ -1664,13 +1544,10 @@ def accept_join_request(
     )
 
     response = roblox_request(
-
         "POST",
         url,
-
         headers={
-            "x-api-key":
-                ROBLOX_API_KEY
+            "x-api-key": ROBLOX_API_KEY
         }
     )
 
@@ -1690,9 +1567,7 @@ async def gaccept(
     username: str
 ):
 
-    if not has_staff_permission(
-        ctx
-    ):
+    if not has_staff_permission(ctx):
 
         await ctx.send(
             "You do not have permission to use this command."
@@ -1713,9 +1588,7 @@ async def gaccept(
 
         return
 
-    user_id = user_data[
-        "id"
-    ]
+    user_id = user_data["id"]
 
     already_member = await asyncio.to_thread(
         is_in_main_group,
@@ -1799,13 +1672,9 @@ async def gaccept(
 @bot.command(
     name="transcript"
 )
-async def transcript_command(
-    ctx
-):
+async def transcript_command(ctx):
 
-    if not has_staff_permission(
-        ctx
-    ):
+    if not has_staff_permission(ctx):
 
         await ctx.send(
             "You do not have permission to use this command."
@@ -1813,9 +1682,7 @@ async def transcript_command(
 
         return
 
-    if str(
-        ctx.channel.id
-    ) not in TICKETS:
+    if str(ctx.channel.id) not in TICKETS:
 
         await ctx.send(
             "This is not a tracked ticket."
@@ -1839,13 +1706,9 @@ async def transcript_command(
 @bot.command(
     name="delete"
 )
-async def delete_command(
-    ctx
-):
+async def delete_command(ctx):
 
-    if not has_staff_permission(
-        ctx
-    ):
+    if not has_staff_permission(ctx):
 
         await ctx.send(
             "You do not have permission to use this command."
@@ -1869,13 +1732,9 @@ async def delete_command(
         ctx.channel
     )
 
-    del TICKETS[
-        channel_id
-    ]
+    del TICKETS[channel_id]
 
-    save_tickets(
-        TICKETS
-    )
+    save_tickets(TICKETS)
 
     await ctx.channel.delete(
         reason="Ghost ticket deleted"
@@ -1886,9 +1745,7 @@ async def delete_command(
 # HISTORICAL MESSAGE SCANNER
 # =========================================================
 
-async def refresh_historical_message_stats(
-    guild
-):
+async def refresh_historical_message_stats(guild):
 
     counts = {}
 
@@ -1915,18 +1772,13 @@ async def refresh_historical_message_stats(
                 )
 
                 counts[user_id] = (
-                    counts.get(
-                        user_id,
-                        0
-                    ) + 1
+                    counts.get(user_id, 0) + 1
                 )
 
         except discord.Forbidden:
-
             continue
 
         except discord.HTTPException:
-
             continue
 
     for member in guild.members:
@@ -1939,18 +1791,44 @@ async def refresh_historical_message_stats(
             member.id
         )
 
-        data[
-            "message_count"
-        ] = counts.get(
+        data["message_count"] = counts.get(
             str(member.id),
             0
         )
 
-        data[
-            "username"
-        ] = str(member)
+        data["username"] = str(member)
 
     save_stats()
+
+
+# =========================================================
+# MESSAGE TRACKING
+# =========================================================
+
+@bot.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    if message.guild:
+
+        data = get_user_stats(
+            message.guild.id,
+            message.author.id
+        )
+
+        data["message_count"] = int(
+            data.get("message_count", 0)
+        ) + 1
+
+        data["username"] = str(
+            message.author
+        )
+
+        save_stats()
+
+    await bot.process_commands(message)
 
 
 # =========================================================
@@ -2001,9 +1879,7 @@ async def stats_command(
 
     embed = discord.Embed(
         title="Activity Stats",
-        description=(
-            f"Stats for {member.mention}"
-        ),
+        description=f"Stats for {member.mention}",
         color=discord.Color.dark_grey()
     )
 
@@ -2039,12 +1915,15 @@ async def stats_command(
 @bot.command(
     name="activitycheck"
 )
-@commands.has_permissions(
-    manage_guild=True
-)
-async def activitycheck(
-    ctx
-):
+async def activitycheck(ctx):
+
+    if not has_staff_permission(ctx):
+
+        await ctx.send(
+            "You do not have permission to use this command."
+        )
+
+        return
 
     reference = ctx.message.reference
 
@@ -2093,7 +1972,6 @@ async def activitycheck(
         "Scanning historical server messages. This may take a while..."
     )
 
-    # Get the complete historical message count.
     await refresh_historical_message_stats(
         ctx.guild
     )
@@ -2109,10 +1987,6 @@ async def activitycheck(
         )
 
         return
-
-    # -----------------------------------------------------
-    # FIND EVERYONE WHO REACTED
-    # -----------------------------------------------------
 
     reacted_users = set()
 
@@ -2131,16 +2005,10 @@ async def activitycheck(
             continue
 
     missing_users = []
-
     bypass_message_users = []
-
     bypass_vc_users = []
 
     reacted_count = 0
-
-    # -----------------------------------------------------
-    # CHECK VERIFIED MEMBERS
-    # -----------------------------------------------------
 
     for member in verified_role.members:
 
@@ -2164,14 +2032,12 @@ async def activitycheck(
             member.id
         )
 
-        # They reacted.
         if member.id in reacted_users:
 
             reacted_count += 1
 
             continue
 
-        # 200+ messages bypass.
         if message_count >= ACTIVITY_BYPASS_MESSAGES:
 
             bypass_message_users.append(
@@ -2180,7 +2046,6 @@ async def activitycheck(
 
             continue
 
-        # 10+ VC hours bypass.
         if voice_seconds >= ACTIVITY_BYPASS_VC_SECONDS:
 
             bypass_vc_users.append(
@@ -2189,7 +2054,6 @@ async def activitycheck(
 
             continue
 
-        # Did not react and no bypass.
         missing_users.append(
             {
                 "member": member,
@@ -2197,10 +2061,6 @@ async def activitycheck(
                 "voice_seconds": voice_seconds
             }
         )
-
-    # -----------------------------------------------------
-    # SUMMARY
-    # -----------------------------------------------------
 
     total_verified = sum(
         1
@@ -2257,10 +2117,6 @@ async def activitycheck(
         embed=embed
     )
 
-    # -----------------------------------------------------
-    # LOG USERS WHO FAILED
-    # -----------------------------------------------------
-
     if not missing_users:
 
         await ctx.send(
@@ -2273,18 +2129,12 @@ async def activitycheck(
 
     for item in missing_users:
 
-        member = item[
-            "member"
-        ]
+        member = item["member"]
 
-        messages = item[
-            "messages"
-        ]
+        messages = item["messages"]
 
         vc_hours = (
-            item[
-                "voice_seconds"
-            ] / 3600
+            item["voice_seconds"] / 3600
         )
 
         lines.append(
@@ -2292,10 +2142,6 @@ async def activitycheck(
             f"{messages:,} messages — "
             f"{vc_hours:.2f} VC hours"
         )
-
-    # -----------------------------------------------------
-    # SPLIT INTO DISCORD-SAFE MESSAGES
-    # -----------------------------------------------------
 
     chunks = []
 
@@ -2316,9 +2162,7 @@ async def activitycheck(
 
             current = ""
 
-        current += (
-            line + "\n"
-        )
+        current += line + "\n"
 
     if current:
         chunks.append(
@@ -2358,13 +2202,7 @@ async def on_voice_state_update(
         member.id
     )
 
-    data[
-        "username"
-    ] = str(member)
-
-    # -----------------------------------------------------
-    # JOINED VOICE
-    # -----------------------------------------------------
+    data["username"] = str(member)
 
     if (
         before.channel is None
@@ -2375,13 +2213,7 @@ async def on_voice_state_update(
             "voice_joined_at"
         ):
 
-            data[
-                "voice_joined_at"
-            ] = time.time()
-
-    # -----------------------------------------------------
-    # LEFT VOICE
-    # -----------------------------------------------------
+            data["voice_joined_at"] = time.time()
 
     elif (
         before.channel is not None
@@ -2404,16 +2236,12 @@ async def on_voice_state_update(
                     )
                 )
 
-                data[
-                    "voice_seconds"
-                ] += elapsed
+                data["voice_seconds"] += elapsed
 
             except Exception:
                 pass
 
-        data[
-            "voice_joined_at"
-        ] = None
+        data["voice_joined_at"] = None
 
     save_stats()
 
@@ -2425,7 +2253,6 @@ async def on_voice_state_update(
 @bot.event
 async def on_ready():
 
-    # Start tracking users who are already in VC.
     for guild in bot.guilds:
 
         for member in guild.members:
@@ -2443,17 +2270,13 @@ async def on_ready():
                     member.id
                 )
 
-                data[
-                    "username"
-                ] = str(member)
+                data["username"] = str(member)
 
                 if not data.get(
                     "voice_joined_at"
                 ):
 
-                    data[
-                        "voice_joined_at"
-                    ] = time.time()
+                    data["voice_joined_at"] = time.time()
 
     save_stats()
 
@@ -2501,7 +2324,6 @@ async def on_command_error(
         error,
         commands.CommandNotFound
     ):
-
         return
 
     if isinstance(
@@ -2546,6 +2368,4 @@ async def on_command_error(
 # START
 # =========================================================
 
-bot.run(
-    TOKEN
-)
+bot.run(TOKEN)
