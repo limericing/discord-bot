@@ -3,6 +3,7 @@ import json
 import asyncio
 import requests
 import discord
+import time
 
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -53,6 +54,11 @@ MIN_ACCOUNT_AGE_DAYS = 90
 
 CREWS_FILE = os.path.join(BASE_DIR, "crews.json")
 TICKETS_FILE = os.path.join(BASE_DIR, "tickets.json")
+STATS_FILE = os.path.join(BASE_DIR, "stats.json")
+
+# Activity requirements
+ACTIVITY_BYPASS_MESSAGES = 200
+ACTIVITY_BYPASS_VC_SECONDS = 10 * 60 * 60
 
 
 # =========================================================
@@ -121,6 +127,95 @@ TICKETS = load_tickets()
 
 
 # =========================================================
+# STATS
+# =========================================================
+
+def load_stats():
+    if not os.path.exists(STATS_FILE):
+        return {}
+
+    try:
+        with open(STATS_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    except Exception:
+        return {}
+
+
+def save_stats():
+    try:
+        with open(STATS_FILE, "w", encoding="utf-8") as file:
+            json.dump(
+                stats_data,
+                file,
+                indent=4
+            )
+    except Exception as error:
+        print(f"Could not save stats.json: {error}")
+
+
+stats_data = load_stats()
+
+
+def get_user_stats(guild_id, user_id):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in stats_data:
+        stats_data[guild_id] = {}
+
+    if user_id not in stats_data[guild_id]:
+        stats_data[guild_id][user_id] = {
+            "message_count": 0,
+            "voice_seconds": 0,
+            "voice_joined_at": None,
+            "username": ""
+        }
+
+    return stats_data[guild_id][user_id]
+
+
+def get_live_voice_seconds(guild_id, user_id):
+    data = get_user_stats(
+        guild_id,
+        user_id
+    )
+
+    seconds = int(
+        data.get("voice_seconds", 0)
+    )
+
+    joined_at = data.get(
+        "voice_joined_at"
+    )
+
+    if joined_at:
+        try:
+            seconds += max(
+                0,
+                int(
+                    time.time() -
+                    float(joined_at)
+                )
+            )
+        except Exception:
+            pass
+
+    return seconds
+
+
+def format_hours(seconds):
+    hours = seconds / 3600
+
+    if hours >= 1:
+        return f"{hours:.2f} hours"
+
+    minutes = seconds / 60
+
+    return f"{minutes:.0f} minutes"
+
+
+# =========================================================
 # DISCORD
 # =========================================================
 
@@ -150,6 +245,7 @@ def roblox_request(method, url, **kwargs):
             timeout=15,
             **kwargs
         )
+
     except requests.RequestException:
         return None
 
@@ -159,6 +255,7 @@ def roblox_request(method, url, **kwargs):
 # =========================================================
 
 def get_roblox_user(username):
+
     response = roblox_request(
         "POST",
         "https://users.roblox.com/v1/usernames/users",
@@ -180,6 +277,7 @@ def get_roblox_user(username):
 
 
 def get_user_details(user_id):
+
     response = roblox_request(
         "GET",
         f"https://users.roblox.com/v1/users/{user_id}"
@@ -192,6 +290,7 @@ def get_user_details(user_id):
 
 
 def get_avatar_url(user_id):
+
     response = roblox_request(
         "GET",
         "https://thumbnails.roblox.com/v1/users/avatar",
@@ -215,6 +314,7 @@ def get_avatar_url(user_id):
 
 
 def get_friend_count(user_id):
+
     response = roblox_request(
         "GET",
         f"https://friends.roblox.com/v1/users/{user_id}/friends/count"
@@ -227,6 +327,7 @@ def get_friend_count(user_id):
 
 
 def get_user_groups(user_id):
+
     response = roblox_request(
         "GET",
         f"https://groups.roblox.com/v2/users/{user_id}/groups/roles"
@@ -235,31 +336,56 @@ def get_user_groups(user_id):
     if not response or response.status_code != 200:
         return []
 
-    return response.json().get("data", [])
+    return response.json().get(
+        "data",
+        []
+    )
 
 
 def get_blacklisted_crews(user_id):
-    groups = get_user_groups(user_id)
+
+    groups = get_user_groups(
+        user_id
+    )
 
     found = []
 
     for group in groups:
-        group_info = group.get("group", {})
-        group_id = str(group_info.get("id"))
+
+        group_info = group.get(
+            "group",
+            {}
+        )
+
+        group_id = str(
+            group_info.get("id")
+        )
 
         if group_id in CREWS:
-            found.append(CREWS[group_id])
+            found.append(
+                CREWS[group_id]
+            )
 
     return found
 
 
 def is_in_main_group(user_id):
-    groups = get_user_groups(user_id)
+
+    groups = get_user_groups(
+        user_id
+    )
 
     for group in groups:
-        group_info = group.get("group", {})
 
-        if str(group_info.get("id")) == str(MAIN_GROUP_ID):
+        group_info = group.get(
+            "group",
+            {}
+        )
+
+        if str(
+            group_info.get("id")
+        ) == str(MAIN_GROUP_ID):
+
             return True
 
     return False
@@ -270,20 +396,34 @@ def is_in_main_group(user_id):
 # =========================================================
 
 def get_discord_account_age(member):
-    now = datetime.now(timezone.utc)
 
-    return (now - member.created_at).days
+    now = datetime.now(
+        timezone.utc
+    )
+
+    return (
+        now - member.created_at
+    ).days
 
 
 # =========================================================
 # STAFF PERMISSIONS
 # =========================================================
 
-def has_staff_permission(ctx_or_interaction):
-    if isinstance(ctx_or_interaction, commands.Context):
+def has_staff_permission(
+    ctx_or_interaction
+):
+
+    if isinstance(
+        ctx_or_interaction,
+        commands.Context
+    ):
+
         guild = ctx_or_interaction.guild
         member = ctx_or_interaction.author
+
     else:
+
         guild = ctx_or_interaction.guild
         member = ctx_or_interaction.user
 
@@ -300,6 +440,7 @@ def has_staff_permission(ctx_or_interaction):
 
 
 def has_add_crew_permission(ctx):
+
     if not ctx.guild:
         return False
 
@@ -319,6 +460,7 @@ def has_add_crew_permission(ctx):
 # =========================================================
 
 def verification_embed():
+
     embed = discord.Embed(
         title="Ghost Staff Verification",
         description=(
@@ -363,64 +505,99 @@ def build_member_info_embed(
     details,
     blacklisted
 ):
+
     user_id = user_data["id"]
 
-    avatar_url = get_avatar_url(user_id)
-    friend_count = get_friend_count(user_id)
+    avatar_url = get_avatar_url(
+        user_id
+    )
 
-    created_string = details.get("created")
+    friend_count = get_friend_count(
+        user_id
+    )
+
+    created_string = details.get(
+        "created"
+    )
 
     try:
+
         created = datetime.fromisoformat(
-            created_string.replace("Z", "+00:00")
+            created_string.replace(
+                "Z",
+                "+00:00"
+            )
         )
 
         account_age = (
-            datetime.now(timezone.utc) - created
+            datetime.now(
+                timezone.utc
+            ) - created
         ).days
 
     except Exception:
+
         account_age = 0
 
-    discord_age = get_discord_account_age(member)
+    discord_age = get_discord_account_age(
+        member
+    )
 
-    # Account age
     if account_age >= MIN_ACCOUNT_AGE_DAYS:
+
         account_age_text = (
             f"Passed — {account_age} days"
         )
+
     else:
+
         account_age_text = (
             f"Failed — {account_age} days"
         )
 
-    # Friends
     if friend_count is None:
-        friends_text = "Unable to check"
-    else:
-        friends_text = str(friend_count)
 
-    # Blacklist
-    if blacklisted:
-        blacklist_text = ", ".join(blacklisted)
+        friends_text = "Unable to check"
+
     else:
+
+        friends_text = str(
+            friend_count
+        )
+
+    if blacklisted:
+
+        blacklist_text = ", ".join(
+            blacklisted
+        )
+
+    else:
+
         blacklist_text = "None"
 
-    # Discord age
     if discord_age >= MIN_ACCOUNT_AGE_DAYS:
+
         discord_age_text = (
             f"Passed — {discord_age} days"
         )
+
     else:
+
         discord_age_text = (
             f"Failed — {discord_age} days"
         )
 
-    # Ghost group
     if is_in_main_group(user_id):
-        ghost_group_text = "Already in Ghost"
+
+        ghost_group_text = (
+            "Already in Ghost"
+        )
+
     else:
-        ghost_group_text = "Not in Ghost"
+
+        ghost_group_text = (
+            "Not in Ghost"
+        )
 
     embed = discord.Embed(
         title="Ghost Staff Verification",
@@ -430,25 +607,18 @@ def build_member_info_embed(
         )
     )
 
-    # =====================================================
-    # MEMBER INFORMATION
-    # =====================================================
-
     embed.add_field(
         name="Member Information",
         value=(
             f"**Discord:** {member.mention}\n"
             f"**Discord ID:** `{member.id}`\n"
             f"**Roblox:** [{username}]"
-            f"(https://www.roblox.com/users/{user_id}/profile)\n"
+            f"(https://www.roblox.com/users/"
+            f"{user_id}/profile)\n"
             f"**Roblox ID:** `{user_id}`"
         ),
         inline=False
     )
-
-    # =====================================================
-    # VERIFICATION CHECKS
-    # =====================================================
 
     embed.add_field(
         name="Account Age",
@@ -481,6 +651,7 @@ def build_member_info_embed(
     )
 
     if avatar_url:
+
         embed.set_thumbnail(
             url=avatar_url
         )
@@ -512,6 +683,7 @@ class VerificationModal(
         self,
         interaction: discord.Interaction
     ):
+
         await interaction.response.defer(
             ephemeral=True
         )
@@ -524,10 +696,12 @@ class VerificationModal(
         )
 
         if not user_data:
+
             await interaction.followup.send(
                 "That Roblox username could not be found.",
                 ephemeral=True
             )
+
             return
 
         user_id = user_data["id"]
@@ -538,10 +712,12 @@ class VerificationModal(
         )
 
         if not details:
+
             await interaction.followup.send(
                 "Could not retrieve the Roblox account.",
                 ephemeral=True
             )
+
             return
 
         blacklisted = await asyncio.to_thread(
@@ -556,18 +732,23 @@ class VerificationModal(
         )
 
         if not category:
+
             await interaction.followup.send(
                 "The ticket category could not be found.",
                 ephemeral=True
             )
+
             return
 
         # Prevent duplicate tickets.
         for channel_id, ticket in TICKETS.items():
 
-            if str(ticket.get("discord_id")) != str(
+            if str(
+                ticket.get("discord_id")
+            ) != str(
                 interaction.user.id
             ):
+
                 continue
 
             existing = guild.get_channel(
@@ -575,24 +756,29 @@ class VerificationModal(
             )
 
             if existing:
+
                 await interaction.followup.send(
                     f"You already have an open ticket: "
                     f"{existing.mention}",
                     ephemeral=True
                 )
+
                 return
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
-                view_channel=False
-            ),
 
-            interaction.user: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                attach_files=True
-            )
+            guild.default_role:
+                discord.PermissionOverwrite(
+                    view_channel=False
+                ),
+
+            interaction.user:
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True,
+                    attach_files=True
+                )
         }
 
         staff_role = guild.get_role(
@@ -600,67 +786,89 @@ class VerificationModal(
         )
 
         if staff_role:
-            overwrites[staff_role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                manage_messages=True
+
+            overwrites[staff_role] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True,
+                    manage_messages=True
+                )
             )
 
         safe_username = "".join(
             character
             for character in username.lower()
-            if character.isalnum() or character in "-_"
+            if character.isalnum()
+            or character in "-_"
         )
 
-        channel_name = f"verify-{safe_username}"
-
-        ticket_channel = await guild.create_text_channel(
-            channel_name,
-            category=category,
-            overwrites=overwrites,
-            reason="Ghost verification ticket"
+        channel_name = (
+            f"verify-{safe_username}"
         )
 
-        created = details.get("created")
+        ticket_channel = (
+            await guild.create_text_channel(
+                channel_name,
+                category=category,
+                overwrites=overwrites,
+                reason="Ghost verification ticket"
+            )
+        )
+
+        created = details.get(
+            "created"
+        )
 
         if not created:
+
             created = datetime.now(
                 timezone.utc
             ).isoformat()
 
         ticket_data = {
-            "discord_id": interaction.user.id,
-            "discord_name": str(interaction.user),
-            "roblox_username": username,
-            "roblox_id": user_id,
-            "created": created,
-            "blacklisted": blacklisted,
-            "claimed_by": None
+
+            "discord_id":
+                interaction.user.id,
+
+            "discord_name":
+                str(interaction.user),
+
+            "roblox_username":
+                username,
+
+            "roblox_id":
+                user_id,
+
+            "created":
+                created,
+
+            "blacklisted":
+                blacklisted,
+
+            "claimed_by":
+                None
         }
 
-        TICKETS[str(ticket_channel.id)] = ticket_data
+        TICKETS[
+            str(ticket_channel.id)
+        ] = ticket_data
 
-        save_tickets(TICKETS)
-
-        # =================================================
-        # USERNAME LOG
-        # =================================================
+        save_tickets(
+            TICKETS
+        )
 
         username_log = guild.get_channel(
             USERNAME_LOG_CHANNEL_ID
         )
 
         if username_log:
+
             await username_log.send(
                 f"Roblox username submitted: **{username}**\n"
                 f"Discord user: {interaction.user.mention}\n"
                 f"Roblox ID: `{user_id}`"
             )
-
-        # =================================================
-        # TICKET EMBED
-        # =================================================
 
         ticket_embed = await asyncio.to_thread(
             build_member_info_embed,
@@ -671,24 +879,25 @@ class VerificationModal(
             blacklisted
         )
 
-        # =================================================
-        # TICKET MESSAGE
-        # =================================================
-
         await ticket_channel.send(
+
             content=(
                 f"<@&{STAFF_ROLE_ID}>\n\n"
                 f"Thanks for applying to **{MAIN_GROUP_NAME}**!\n"
                 f"Please wait for a staff member to review "
                 f"your application."
             ),
+
             embed=ticket_embed,
+
             view=TicketView()
         )
 
         await interaction.followup.send(
+
             f"Your verification ticket has been created: "
             f"{ticket_channel.mention}",
+
             ephemeral=True
         )
 
@@ -700,6 +909,7 @@ class VerificationModal(
 class VerifyPanelView(View):
 
     def __init__(self):
+
         super().__init__(
             timeout=None
         )
@@ -724,6 +934,7 @@ class VerifyPanelView(View):
         interaction: discord.Interaction,
         button: Button
     ):
+
         await interaction.response.send_modal(
             VerificationModal()
         )
@@ -736,6 +947,7 @@ class VerifyPanelView(View):
 class TicketView(View):
 
     def __init__(self):
+
         super().__init__(
             timeout=None
         )
@@ -764,11 +976,16 @@ class TicketView(View):
         interaction: discord.Interaction,
         button: Button
     ):
-        if not has_staff_permission(interaction):
+
+        if not has_staff_permission(
+            interaction
+        ):
+
             await interaction.response.send_message(
                 "You do not have permission to claim tickets.",
                 ephemeral=True
             )
+
             return
 
         channel_id = str(
@@ -776,17 +993,23 @@ class TicketView(View):
         )
 
         if channel_id not in TICKETS:
+
             await interaction.response.send_message(
                 "This is not a tracked ticket.",
                 ephemeral=True
             )
+
             return
 
-        TICKETS[channel_id]["claimed_by"] = (
+        TICKETS[
+            channel_id
+        ]["claimed_by"] = (
             interaction.user.id
         )
 
-        save_tickets(TICKETS)
+        save_tickets(
+            TICKETS
+        )
 
         await interaction.response.send_message(
             f"This ticket has been claimed by "
@@ -808,11 +1031,16 @@ class TicketView(View):
         interaction: discord.Interaction,
         button: Button
     ):
-        if not has_staff_permission(interaction):
+
+        if not has_staff_permission(
+            interaction
+        ):
+
             await interaction.response.send_message(
                 "You do not have permission to re-scan tickets.",
                 ephemeral=True
             )
+
             return
 
         ticket = TICKETS.get(
@@ -820,16 +1048,23 @@ class TicketView(View):
         )
 
         if not ticket:
+
             await interaction.response.send_message(
                 "This is not a tracked ticket.",
                 ephemeral=True
             )
+
             return
 
         await interaction.response.defer()
 
-        user_id = ticket["roblox_id"]
-        username = ticket["roblox_username"]
+        user_id = ticket[
+            "roblox_id"
+        ]
+
+        username = ticket[
+            "roblox_username"
+        ]
 
         user_data = await asyncio.to_thread(
             get_roblox_user,
@@ -847,23 +1082,31 @@ class TicketView(View):
         )
 
         if not user_data or not details:
+
             await interaction.followup.send(
                 "Could not re-scan the Roblox account."
             )
+
             return
 
-        ticket["blacklisted"] = blacklisted
+        ticket[
+            "blacklisted"
+        ] = blacklisted
 
-        save_tickets(TICKETS)
+        save_tickets(
+            TICKETS
+        )
 
         member = interaction.guild.get_member(
             ticket["discord_id"]
         )
 
         if not member:
+
             await interaction.followup.send(
                 "Could not find the Discord member."
             )
+
             return
 
         embed = await asyncio.to_thread(
@@ -895,11 +1138,16 @@ class TicketView(View):
         interaction: discord.Interaction,
         button: Button
     ):
-        if not has_staff_permission(interaction):
+
+        if not has_staff_permission(
+            interaction
+        ):
+
             await interaction.response.send_message(
                 "You do not have permission to view groups.",
                 ephemeral=True
             )
+
             return
 
         ticket = TICKETS.get(
@@ -907,10 +1155,12 @@ class TicketView(View):
         )
 
         if not ticket:
+
             await interaction.response.send_message(
                 "This is not a tracked ticket.",
                 ephemeral=True
             )
+
             return
 
         await interaction.response.defer(
@@ -923,15 +1173,18 @@ class TicketView(View):
         )
 
         if not groups:
+
             await interaction.followup.send(
                 "No groups detected.",
                 ephemeral=True
             )
+
             return
 
         lines = []
 
         for group in groups:
+
             group_info = group.get(
                 "group",
                 {}
@@ -962,10 +1215,16 @@ class TicketView(View):
                 f"{role_name}"
             )
 
-        output = "\n".join(lines)
+        output = "\n".join(
+            lines
+        )
 
         if len(output) > 1900:
-            output = output[:1900] + "\n..."
+
+            output = (
+                output[:1900]
+                + "\n..."
+            )
 
         await interaction.followup.send(
             output,
@@ -987,11 +1246,16 @@ class TicketView(View):
         interaction: discord.Interaction,
         button: Button
     ):
-        if not has_staff_permission(interaction):
+
+        if not has_staff_permission(
+            interaction
+        ):
+
             await interaction.response.send_message(
                 "You do not have permission to close tickets.",
                 ephemeral=True
             )
+
             return
 
         await interaction.response.send_message(
@@ -1009,8 +1273,14 @@ class TicketView(View):
         )
 
         if channel_id in TICKETS:
-            del TICKETS[channel_id]
-            save_tickets(TICKETS)
+
+            del TICKETS[
+                channel_id
+            ]
+
+            save_tickets(
+                TICKETS
+            )
 
         await interaction.channel.delete(
             reason="Ghost verification ticket closed"
@@ -1021,7 +1291,9 @@ class TicketView(View):
 # TRANSCRIPTS
 # =========================================================
 
-async def create_transcript(channel):
+async def create_transcript(
+    channel
+):
 
     messages = []
 
@@ -1029,25 +1301,47 @@ async def create_transcript(channel):
         limit=None,
         oldest_first=True
     ):
+
         messages.append({
-            "id": message.id,
-            "author_id": message.author.id,
-            "author": str(message.author),
-            "content": message.content,
-            "created_at": message.created_at.isoformat(),
-            "attachments": [
-                attachment.url
-                for attachment in message.attachments
-            ]
+
+            "id":
+                message.id,
+
+            "author_id":
+                message.author.id,
+
+            "author":
+                str(message.author),
+
+            "content":
+                message.content,
+
+            "created_at":
+                message.created_at.isoformat(),
+
+            "attachments":
+                [
+                    attachment.url
+                    for attachment
+                    in message.attachments
+                ]
         })
 
     transcript = {
-        "channel_id": channel.id,
-        "channel_name": channel.name,
-        "created_at": datetime.now(
-            timezone.utc
-        ).isoformat(),
-        "messages": messages
+
+        "channel_id":
+            channel.id,
+
+        "channel_name":
+            channel.name,
+
+        "created_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+        "messages":
+            messages
     }
 
     transcript_folder = os.path.join(
@@ -1070,6 +1364,7 @@ async def create_transcript(channel):
         "w",
         encoding="utf-8"
     ) as file:
+
         json.dump(
             transcript,
             file,
@@ -1082,11 +1377,14 @@ async def create_transcript(channel):
     )
 
     if log_channel:
+
         await log_channel.send(
+
             content=(
                 f"Transcript created for "
                 f"`{channel.name}`."
             ),
+
             file=discord.File(
                 file_path,
                 filename=f"{channel.id}.json"
@@ -1102,9 +1400,11 @@ async def create_transcript(channel):
 async def verify(ctx):
 
     if ctx.channel.id != VERIFICATION_CHANNEL_ID:
+
         await ctx.send(
             "This command can only be used in the verification channel."
         )
+
         return
 
     await ctx.send(
@@ -1129,9 +1429,11 @@ async def scan(
     )
 
     if not user_data:
+
         await ctx.send(
             "Roblox user not found."
         )
+
         return
 
     blacklisted = await asyncio.to_thread(
@@ -1140,14 +1442,18 @@ async def scan(
     )
 
     if not blacklisted:
+
         await ctx.send(
             "No crew detected."
         )
+
         return
 
     await ctx.send(
         "Crew detected: "
-        + ", ".join(blacklisted)
+        + ", ".join(
+            blacklisted
+        )
     )
 
 
@@ -1163,21 +1469,31 @@ async def addcrew(
     name: str
 ):
 
-    if not has_add_crew_permission(ctx):
+    if not has_add_crew_permission(
+        ctx
+    ):
+
         await ctx.send(
             "You do not have permission to add crews."
         )
+
         return
 
     if not group_id.isdigit():
+
         await ctx.send(
             "The group ID must be a number."
         )
+
         return
 
-    CREWS[group_id] = name
+    CREWS[
+        group_id
+    ] = name
 
-    save_crews(CREWS)
+    save_crews(
+        CREWS
+    )
 
     await ctx.send(
         f"Added crew **{name}** (`{group_id}`)."
@@ -1194,21 +1510,31 @@ async def removecrew(
     group_id: str
 ):
 
-    if not has_add_crew_permission(ctx):
+    if not has_add_crew_permission(
+        ctx
+    ):
+
         await ctx.send(
             "You do not have permission to remove crews."
         )
+
         return
 
     if group_id not in CREWS:
+
         await ctx.send(
             "That crew is not on the blacklist."
         )
+
         return
 
-    name = CREWS.pop(group_id)
+    name = CREWS.pop(
+        group_id
+    )
 
-    save_crews(CREWS)
+    save_crews(
+        CREWS
+    )
 
     await ctx.send(
         f"Removed crew **{name}** (`{group_id}`)."
@@ -1220,17 +1546,22 @@ async def removecrew(
 # =========================================================
 
 @bot.command()
-async def listcrews(ctx):
+async def listcrews(
+    ctx
+):
 
     if not CREWS:
+
         await ctx.send(
             "No crews are currently configured."
         )
+
         return
 
     lines = []
 
     for group_id, name in CREWS.items():
+
         lines.append(
             f"**{name}** — `{group_id}`"
         )
@@ -1244,7 +1575,10 @@ async def listcrews(ctx):
 # GACCEPT
 # =========================================================
 
-def find_join_request(user_id):
+def find_join_request(
+    user_id
+):
+
     if not ROBLOX_API_KEY:
         return None
 
@@ -1254,7 +1588,8 @@ def find_join_request(user_id):
     )
 
     headers = {
-        "x-api-key": ROBLOX_API_KEY
+        "x-api-key":
+            ROBLOX_API_KEY
     }
 
     page_token = None
@@ -1266,11 +1601,15 @@ def find_join_request(user_id):
         }
 
         if page_token:
-            params["pageToken"] = page_token
+            params[
+                "pageToken"
+            ] = page_token
 
         response = roblox_request(
+
             "GET",
             url,
+
             headers=headers,
             params=params
         )
@@ -1284,6 +1623,7 @@ def find_join_request(user_id):
             "groupJoinRequests",
             []
         ):
+
             user = request.get(
                 "user",
                 {}
@@ -1294,7 +1634,10 @@ def find_join_request(user_id):
                 or user.get("id")
             )
 
-            if str(request_user_id) == str(user_id):
+            if str(
+                request_user_id
+            ) == str(user_id):
+
                 return request
 
         page_token = data.get(
@@ -1307,7 +1650,10 @@ def find_join_request(user_id):
     return None
 
 
-def accept_join_request(request_id):
+def accept_join_request(
+    request_id
+):
+
     if not ROBLOX_API_KEY:
         return False
 
@@ -1318,10 +1664,13 @@ def accept_join_request(request_id):
     )
 
     response = roblox_request(
+
         "POST",
         url,
+
         headers={
-            "x-api-key": ROBLOX_API_KEY
+            "x-api-key":
+                ROBLOX_API_KEY
         }
     )
 
@@ -1341,10 +1690,14 @@ async def gaccept(
     username: str
 ):
 
-    if not has_staff_permission(ctx):
+    if not has_staff_permission(
+        ctx
+    ):
+
         await ctx.send(
             "You do not have permission to use this command."
         )
+
         return
 
     user_data = await asyncio.to_thread(
@@ -1353,12 +1706,16 @@ async def gaccept(
     )
 
     if not user_data:
+
         await ctx.send(
             "Could not accept into the Roblox group."
         )
+
         return
 
-    user_id = user_data["id"]
+    user_id = user_data[
+        "id"
+    ]
 
     already_member = await asyncio.to_thread(
         is_in_main_group,
@@ -1366,15 +1723,19 @@ async def gaccept(
     )
 
     if already_member:
+
         await ctx.send(
             "Person is already in the Roblox group."
         )
+
         return
 
     if not ROBLOX_API_KEY:
+
         await ctx.send(
             "Could not accept into the Roblox group."
         )
+
         return
 
     join_request = await asyncio.to_thread(
@@ -1383,9 +1744,11 @@ async def gaccept(
     )
 
     if not join_request:
+
         await ctx.send(
             "Person did not request the Roblox group."
         )
+
         return
 
     request_id = (
@@ -1398,14 +1761,17 @@ async def gaccept(
     )
 
     if not request_id:
+
         request_id = join_request.get(
             "id"
         )
 
     if not request_id:
+
         await ctx.send(
             "Could not accept into the Roblox group."
         )
+
         return
 
     success = await asyncio.to_thread(
@@ -1414,9 +1780,11 @@ async def gaccept(
     )
 
     if not success:
+
         await ctx.send(
             "Could not accept into the Roblox group."
         )
+
         return
 
     await ctx.send(
@@ -1431,18 +1799,28 @@ async def gaccept(
 @bot.command(
     name="transcript"
 )
-async def transcript_command(ctx):
+async def transcript_command(
+    ctx
+):
 
-    if not has_staff_permission(ctx):
+    if not has_staff_permission(
+        ctx
+    ):
+
         await ctx.send(
             "You do not have permission to use this command."
         )
+
         return
 
-    if str(ctx.channel.id) not in TICKETS:
+    if str(
+        ctx.channel.id
+    ) not in TICKETS:
+
         await ctx.send(
             "This is not a tracked ticket."
         )
+
         return
 
     await create_transcript(
@@ -1461,12 +1839,18 @@ async def transcript_command(ctx):
 @bot.command(
     name="delete"
 )
-async def delete_command(ctx):
+async def delete_command(
+    ctx
+):
 
-    if not has_staff_permission(ctx):
+    if not has_staff_permission(
+        ctx
+    ):
+
         await ctx.send(
             "You do not have permission to use this command."
         )
+
         return
 
     channel_id = str(
@@ -1474,22 +1858,564 @@ async def delete_command(ctx):
     )
 
     if channel_id not in TICKETS:
+
         await ctx.send(
             "This is not a tracked ticket."
         )
+
         return
 
     await create_transcript(
         ctx.channel
     )
 
-    del TICKETS[channel_id]
+    del TICKETS[
+        channel_id
+    ]
 
-    save_tickets(TICKETS)
+    save_tickets(
+        TICKETS
+    )
 
     await ctx.channel.delete(
         reason="Ghost ticket deleted"
     )
+
+
+# =========================================================
+# HISTORICAL MESSAGE SCANNER
+# =========================================================
+
+async def refresh_historical_message_stats(
+    guild
+):
+
+    counts = {}
+
+    for channel in guild.text_channels:
+
+        permissions = channel.permissions_for(
+            guild.me
+        )
+
+        if not permissions.read_message_history:
+            continue
+
+        try:
+
+            async for message in channel.history(
+                limit=None
+            ):
+
+                if message.author.bot:
+                    continue
+
+                user_id = str(
+                    message.author.id
+                )
+
+                counts[user_id] = (
+                    counts.get(
+                        user_id,
+                        0
+                    ) + 1
+                )
+
+        except discord.Forbidden:
+
+            continue
+
+        except discord.HTTPException:
+
+            continue
+
+    for member in guild.members:
+
+        if member.bot:
+            continue
+
+        data = get_user_stats(
+            guild.id,
+            member.id
+        )
+
+        data[
+            "message_count"
+        ] = counts.get(
+            str(member.id),
+            0
+        )
+
+        data[
+            "username"
+        ] = str(member)
+
+    save_stats()
+
+
+# =========================================================
+# STATS COMMAND
+# =========================================================
+
+@bot.command(
+    name="stats"
+)
+async def stats_command(
+    ctx,
+    member: discord.Member = None
+):
+
+    if member is None:
+        member = ctx.author
+
+    if member.bot:
+
+        await ctx.send(
+            "Bots do not have activity stats."
+        )
+
+        return
+
+    data = get_user_stats(
+        ctx.guild.id,
+        member.id
+    )
+
+    message_count = int(
+        data.get(
+            "message_count",
+            0
+        )
+    )
+
+    voice_seconds = get_live_voice_seconds(
+        ctx.guild.id,
+        member.id
+    )
+
+    bypass = (
+        message_count >= ACTIVITY_BYPASS_MESSAGES
+        or
+        voice_seconds >= ACTIVITY_BYPASS_VC_SECONDS
+    )
+
+    embed = discord.Embed(
+        title="Activity Stats",
+        description=(
+            f"Stats for {member.mention}"
+        ),
+        color=discord.Color.dark_grey()
+    )
+
+    embed.add_field(
+        name="Messages",
+        value=f"{message_count:,}",
+        inline=True
+    )
+
+    embed.add_field(
+        name="Voice Time",
+        value=format_hours(
+            voice_seconds
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Activity Bypass",
+        value="Yes" if bypass else "No",
+        inline=True
+    )
+
+    await ctx.send(
+        embed=embed
+    )
+
+
+# =========================================================
+# ACTIVITY CHECK
+# =========================================================
+
+@bot.command(
+    name="activitycheck"
+)
+@commands.has_permissions(
+    manage_guild=True
+)
+async def activitycheck(
+    ctx
+):
+
+    reference = ctx.message.reference
+
+    if (
+        reference is None
+        or reference.message_id is None
+    ):
+
+        await ctx.send(
+            "Reply to the message you want to use for the activity check."
+        )
+
+        return
+
+    try:
+
+        target_message = await ctx.channel.fetch_message(
+            reference.message_id
+        )
+
+    except discord.NotFound:
+
+        await ctx.send(
+            "I could not find the message you replied to."
+        )
+
+        return
+
+    except discord.Forbidden:
+
+        await ctx.send(
+            "I cannot access that message."
+        )
+
+        return
+
+    except discord.HTTPException:
+
+        await ctx.send(
+            "I could not load that message."
+        )
+
+        return
+
+    await ctx.send(
+        "Scanning historical server messages. This may take a while..."
+    )
+
+    # Get the complete historical message count.
+    await refresh_historical_message_stats(
+        ctx.guild
+    )
+
+    verified_role = ctx.guild.get_role(
+        VERIFIED_ROLE_ID
+    )
+
+    if verified_role is None:
+
+        await ctx.send(
+            "The verified role could not be found."
+        )
+
+        return
+
+    # -----------------------------------------------------
+    # FIND EVERYONE WHO REACTED
+    # -----------------------------------------------------
+
+    reacted_users = set()
+
+    for reaction in target_message.reactions:
+
+        try:
+
+            async for user in reaction.users():
+
+                reacted_users.add(
+                    user.id
+                )
+
+        except discord.HTTPException:
+
+            continue
+
+    missing_users = []
+
+    bypass_message_users = []
+
+    bypass_vc_users = []
+
+    reacted_count = 0
+
+    # -----------------------------------------------------
+    # CHECK VERIFIED MEMBERS
+    # -----------------------------------------------------
+
+    for member in verified_role.members:
+
+        if member.bot:
+            continue
+
+        data = get_user_stats(
+            ctx.guild.id,
+            member.id
+        )
+
+        message_count = int(
+            data.get(
+                "message_count",
+                0
+            )
+        )
+
+        voice_seconds = get_live_voice_seconds(
+            ctx.guild.id,
+            member.id
+        )
+
+        # They reacted.
+        if member.id in reacted_users:
+
+            reacted_count += 1
+
+            continue
+
+        # 200+ messages bypass.
+        if message_count >= ACTIVITY_BYPASS_MESSAGES:
+
+            bypass_message_users.append(
+                member
+            )
+
+            continue
+
+        # 10+ VC hours bypass.
+        if voice_seconds >= ACTIVITY_BYPASS_VC_SECONDS:
+
+            bypass_vc_users.append(
+                member
+            )
+
+            continue
+
+        # Did not react and no bypass.
+        missing_users.append(
+            {
+                "member": member,
+                "messages": message_count,
+                "voice_seconds": voice_seconds
+            }
+        )
+
+    # -----------------------------------------------------
+    # SUMMARY
+    # -----------------------------------------------------
+
+    total_verified = sum(
+        1
+        for member in verified_role.members
+        if not member.bot
+    )
+
+    embed = discord.Embed(
+        title="Activity Check",
+        description=(
+            f"Target message: "
+            f"{target_message.jump_url}"
+        ),
+        color=discord.Color.dark_grey()
+    )
+
+    embed.add_field(
+        name="Verified Members",
+        value=str(total_verified),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Reacted",
+        value=str(reacted_count),
+        inline=True
+    )
+
+    embed.add_field(
+        name="200+ Messages",
+        value=str(
+            len(bypass_message_users)
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="10+ VC Hours",
+        value=str(
+            len(bypass_vc_users)
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Did Not React",
+        value=str(
+            len(missing_users)
+        ),
+        inline=True
+    )
+
+    await ctx.send(
+        embed=embed
+    )
+
+    # -----------------------------------------------------
+    # LOG USERS WHO FAILED
+    # -----------------------------------------------------
+
+    if not missing_users:
+
+        await ctx.send(
+            "Everyone either reacted or qualified for an activity bypass."
+        )
+
+        return
+
+    lines = []
+
+    for item in missing_users:
+
+        member = item[
+            "member"
+        ]
+
+        messages = item[
+            "messages"
+        ]
+
+        vc_hours = (
+            item[
+                "voice_seconds"
+            ] / 3600
+        )
+
+        lines.append(
+            f"{member.mention} — "
+            f"{messages:,} messages — "
+            f"{vc_hours:.2f} VC hours"
+        )
+
+    # -----------------------------------------------------
+    # SPLIT INTO DISCORD-SAFE MESSAGES
+    # -----------------------------------------------------
+
+    chunks = []
+
+    current = ""
+
+    for line in lines:
+
+        if (
+            len(current)
+            + len(line)
+            + 1
+            > 1900
+        ):
+
+            chunks.append(
+                current
+            )
+
+            current = ""
+
+        current += (
+            line + "\n"
+        )
+
+    if current:
+        chunks.append(
+            current
+        )
+
+    await ctx.send(
+        "Users who did not react:"
+    )
+
+    for chunk in chunks:
+
+        await ctx.send(
+            chunk
+        )
+
+
+# =========================================================
+# VOICE TRACKING
+# =========================================================
+
+@bot.event
+async def on_voice_state_update(
+    member,
+    before,
+    after
+):
+
+    if member.bot:
+        return
+
+    if not member.guild:
+        return
+
+    data = get_user_stats(
+        member.guild.id,
+        member.id
+    )
+
+    data[
+        "username"
+    ] = str(member)
+
+    # -----------------------------------------------------
+    # JOINED VOICE
+    # -----------------------------------------------------
+
+    if (
+        before.channel is None
+        and after.channel is not None
+    ):
+
+        if not data.get(
+            "voice_joined_at"
+        ):
+
+            data[
+                "voice_joined_at"
+            ] = time.time()
+
+    # -----------------------------------------------------
+    # LEFT VOICE
+    # -----------------------------------------------------
+
+    elif (
+        before.channel is not None
+        and after.channel is None
+    ):
+
+        joined_at = data.get(
+            "voice_joined_at"
+        )
+
+        if joined_at:
+
+            try:
+
+                elapsed = max(
+                    0,
+                    int(
+                        time.time()
+                        - float(joined_at)
+                    )
+                )
+
+                data[
+                    "voice_seconds"
+                ] += elapsed
+
+            except Exception:
+                pass
+
+        data[
+            "voice_joined_at"
+        ] = None
+
+    save_stats()
 
 
 # =========================================================
@@ -1499,6 +2425,38 @@ async def delete_command(ctx):
 @bot.event
 async def on_ready():
 
+    # Start tracking users who are already in VC.
+    for guild in bot.guilds:
+
+        for member in guild.members:
+
+            if member.bot:
+                continue
+
+            if (
+                member.voice
+                and member.voice.channel
+            ):
+
+                data = get_user_stats(
+                    guild.id,
+                    member.id
+                )
+
+                data[
+                    "username"
+                ] = str(member)
+
+                if not data.get(
+                    "voice_joined_at"
+                ):
+
+                    data[
+                        "voice_joined_at"
+                    ] = time.time()
+
+    save_stats()
+
     bot.add_view(
         VerifyPanelView()
     )
@@ -1507,12 +2465,25 @@ async def on_ready():
         TicketView()
     )
 
-    print("Ghost configuration loaded.")
-    print(f"Logged in as {bot.user}")
-    print(f"Prefix: {PREFIX}")
+    print(
+        "Ghost configuration loaded."
+    )
+
+    print(
+        f"Logged in as {bot.user}"
+    )
+
+    print(
+        f"Prefix: {PREFIX}"
+    )
+
     print(
         f"Main group: "
         f"{MAIN_GROUP_NAME} ({MAIN_GROUP_ID})"
+    )
+
+    print(
+        f"Stats file: {STATS_FILE}"
     )
 
 
@@ -1530,24 +2501,40 @@ async def on_command_error(
         error,
         commands.CommandNotFound
     ):
+
         return
 
     if isinstance(
         error,
         commands.MissingRequiredArgument
     ):
+
         await ctx.send(
             "Missing required argument."
         )
+
         return
 
     if isinstance(
         error,
         commands.BadArgument
     ):
+
         await ctx.send(
             "Invalid argument."
         )
+
+        return
+
+    if isinstance(
+        error,
+        commands.MissingPermissions
+    ):
+
+        await ctx.send(
+            "You do not have permission to use this command."
+        )
+
         return
 
     print(
@@ -1559,4 +2546,6 @@ async def on_command_error(
 # START
 # =========================================================
 
-bot.run(TOKEN)
+bot.run(
+    TOKEN
+)
